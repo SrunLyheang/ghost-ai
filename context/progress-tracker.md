@@ -4,11 +4,11 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Invite accept/decline (follow-up to spec 09) — invites are now explicit: an invited email gets a pending `ProjectCollaborator` row that grants no access until accepted from the "Pending invites" section in the `/editor` sidebar — done
+- Shape panel (`context/feature-specs/12-shape-panel.md`) — bottom pill toolbar; drag a shape onto the canvas to create a node — done
 
 ## Current Goal
 
-- Build real canvas logic into the `/editor/[roomId]` workspace (Liveblocks + React Flow), then AI chat.
+- Add canvas interactions (custom node/edge rendering, controls, persistence), then AI chat.
 
 ## Completed
 
@@ -67,6 +67,29 @@ Update this file whenever the current phase, active feature, or implementation s
   - `components/editor/access-denied.tsx`: copy now points invitees to the Invites tab.
 - Verified: `tsc --noEmit`, `eslint app components lib hooks --max-warnings=0`, and `npm run build` all pass clean; `/api/invites` and `/api/invites/[projectId]` appear as `ƒ` in the route table.
 - Behavior change on existing data: pre-migration `ProjectCollaborator` rows have `acceptedAt = NULL`, so any collaborators added before this change now read as pending and must re-accept. Fine for current dev state (no real shared projects yet).
+- Liveblocks setup (`context/feature-specs/10-liveblocks-setup.md`):
+  - `liveblocks.config.ts` (was an untracked Liveblocks scaffold): `Presence` = `{ cursor: {x,y} | null; isThinking: boolean }`; `UserMeta` = `{ id: string; info: { name; avatar; color } }`. `Storage`/`RoomEvent`/`ThreadMetadata`/`RoomInfo` stubbed as `Record<string, never>` (the raw `{}` scaffold fails this repo's `no-empty-object-type` lint) — `Storage` gets a real tree with the React Flow canvas.
+  - `lib/liveblocks.ts` (new): `getLiveblocks()` — lazily constructs and `globalThis`-caches the `@liveblocks/node` `Liveblocks` client (the constructor validates `LIVEBLOCKS_SECRET_KEY`, so it can't be built at import time or `next build` page-data collection throws). `colorForUserId(id)` — `hash * 31 + charCodeAt` folded into a fixed 10-color palette; same ID → same color. `lib/liveblocks.check.ts` — assert-based check (`npx tsx lib/liveblocks.check.ts`).
+  - `app/api/liveblocks-auth/route.ts` (new): `POST` — `currentUser()` → `401`; reads `{ room }` from body (`400` if missing/invalid JSON, reusing `InvalidJsonBodyError`); `getAccessibleProject(room, { userId, email })` → `403`; `getLiveblocks().getOrCreateRoom(room, { defaultAccesses: [] })`; `prepareSession(user.id, { userInfo: { name, avatar: imageUrl, color } })` + `session.allow(room, FULL_ACCESS)` → returns `session.authorize()`'s `{ status, body }` verbatim. Room ID == project ID. `/api/(.*)` already bypasses the proxy `auth.protect()`.
+  - Dependencies: spec said all Liveblocks packages were installed; `@liveblocks/node` was in fact missing — added (`^3.24.1`, matches the other `@liveblocks/*`).
+  - Env: `LIVEBLOCKS_SECRET_KEY` (an `sk_...` key from the Liveblocks dashboard) must be added to `.env.local` before the auth route works at runtime — not set yet.
+- Verified: `tsc --noEmit`, `eslint app/api/liveblocks-auth lib/liveblocks.ts liveblocks.config.ts --max-warnings=0`, `npm run build`, and `npx tsx lib/liveblocks.check.ts` all pass; `/api/liveblocks-auth` appears as `ƒ` in the route table.
+- Base canvas (`context/feature-specs/11-base-canvas.md`):
+  - `types/canvas.ts` (new): `CanvasNodeShape` (`"rectangle" | "ellipse" | "diamond"`), `CanvasNodeData` (`label`, `color`, `shape` + index signature — React Flow requires node data to be a record), `CanvasEdgeData` (`Record<string, unknown>`), exported type-key constants `CANVAS_NODE_TYPE = "canvasNode"` / `CANVAS_EDGE_TYPE = "canvasEdge"`, and `CanvasNode` / `CanvasEdge` (`Node`/`Edge` from `@xyflow/react` bound to those data + type keys).
+  - `components/editor/canvas.tsx` (new, `"use client"`): `CanvasRoom({ roomId })` — `LiveblocksProvider authEndpoint="/api/liveblocks-auth"` → `RoomProvider id={roomId} initialPresence={{ cursor: null, isThinking: false }}` (Presence type also requires `isThinking`) → an inline `CanvasErrorBoundary` class component (fallback text for Liveblocks connection/room errors — `react-error-boundary` isn't installed, ~15 lines beats a new dep) → `ClientSideSuspense` (from `@liveblocks/react/suspense`) with a muted "Loading canvas…" fallback → `Canvas`. `Canvas` calls `useLiveblocksFlow<CanvasNode, CanvasEdge>({ suspense: true, nodes: { initial: [] }, edges: { initial: [] } })` and passes the synced `nodes`/`edges`/`onNodesChange`/`onEdgesChange`/`onConnect`/`onDelete` into `<ReactFlow>` with `connectionMode={ConnectionMode.Loose}` (loose connections), `fitView`, `<Background variant={BackgroundVariant.Dots} gap={16} size={1} />`, and `<MiniMap />`. Imports `@xyflow/react/dist/style.css` + `@liveblocks/react-flow/styles.css`.
+  - `components/editor/workspace-shell.tsx`: the `<main>` placeholder paragraph is replaced by `<main className="relative flex-1 bg-background"><CanvasRoom roomId={project.id} /></main>` (room ID == project ID). No prop changes.
+  - `liveblocks.config.ts` left as-is — `useLiveblocksFlow` owns its own Storage subtree (default key `"flow"`, `LiveObject<{ nodes: LiveMap; edges: LiveMap }>`); `Storage: Record<string, never>` still type-checks and builds. Fill it in only when `useStorage`/`useMutation` land for persistence/AI.
+  - Scope limits honored: no controls, no custom node/edge rendering, no persistence logic, no AI behavior.
+- Verified: `npm run build` (TypeScript included) and `eslint components/editor/canvas.tsx components/editor/workspace-shell.tsx types/canvas.ts --max-warnings=0` pass clean.
+- Shape panel (`context/feature-specs/12-shape-panel.md`):
+  - `types/canvas.ts`: `CanvasNodeShape` widened to `"rectangle" | "diamond" | "circle" | "pill" | "cylinder" | "hexagon"` (dropped the unused `"ellipse"`). New exports — `DEFAULT_NODE_COLOR = "#00c8d4"` (`--accent-primary`), `SHAPE_DEFAULT_SIZE` (per-shape `{width,height}`: rectangles wider than tall, circle/cylinder square, diamond larger), `SHAPE_DRAG_TYPE = "application/x-canvas-shape"`, `ShapeDragPayload { shape, width, height }`.
+  - `components/editor/canvas.tsx` (extended, still exports only `CanvasRoom`):
+    - `<Canvas>` is now wrapped in `<ReactFlowProvider>` (inside `ClientSideSuspense`) so it can call `useReactFlow()` for `screenToFlowPosition`.
+    - `ShapePanel` — a React Flow `<Panel position="bottom-center">` rendering a rounded-full `bg-surface` bar of six `draggable` icon buttons (lucide `RectangleHorizontal`/`Diamond`/`Circle`/`Pill`/`Cylinder`/`Hexagon`). `onDragStart` writes `JSON.stringify({ shape, ...SHAPE_DEFAULT_SIZE[shape] })` to `dataTransfer` under `SHAPE_DRAG_TYPE` and sets `effectAllowed = "move"`.
+    - The `<ReactFlow>` is wrapped in a `div` with `onDragOver` (preventDefault + `dropEffect = "move"`) and `onDrop`: reads + `JSON.parse`s the payload (bails on missing/invalid), `screenToFlowPosition({ x: clientX, y: clientY })`, node ID = `` `${shape}-${Date.now()}-${counter}` `` (counter is a `useRef(0)` bumped per drop), then `onNodesChange([{ type: "add", item: node }])`. New node: `type: CANVAS_NODE_TYPE`, `width`/`height` from payload, `data: { label: "", color: DEFAULT_NODE_COLOR, shape }`.
+    - `CanvasNodeView` — `NodeProps<CanvasNode>` renderer registered as `nodeTypes[CANVAS_NODE_TYPE]` (module const). Renders `<ShapeOutline shape={data.shape} color={data.color} />` (a stretched `viewBox="0 0 100 100"` SVG, `preserveAspectRatio="none"`, `vector-effect="non-scaling-stroke"`) — rect/pill = `<rect rx>`, circle = `<ellipse>`, diamond/hexagon = `<polygon>`, cylinder = two `<path>`s — plus centered label and `Handle` top (target) + bottom (source). Each shape now draws its own outline.
+  - No changes to `workspace-shell.tsx` (`<CanvasRoom>` API unchanged).
+- Verified: `tsc --noEmit`, `eslint components/editor/canvas.tsx types/canvas.ts --max-warnings=0`, and `npm run build` all pass clean.
 
 ## In Progress
 
@@ -74,7 +97,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Next Up
 
-- Real canvas in `/editor/[roomId]`: Liveblocks room + React Flow surface, replacing the `<main>` placeholder in `components/editor/workspace-shell.tsx`. Liveblocks room token issuance must reuse `getAccessibleProject` for the membership check.
+- Canvas interactions: inline label editing, `canvasEdge` rendering, a `<Controls>`, and `<Cursors />` from `@liveblocks/react-flow` for live cursors (Presence `cursor` is already typed). Fill in `Storage` in `liveblocks.config.ts` when persistence (`canvasJsonPath`) or `useStorage`/`useMutation` is needed.
 - Wire the AI-chat `<aside>` in `workspace-shell.tsx` (still an inert placeholder).
 - Collaborator email vs. Clerk primary email is matched case-insensitively only because invites are stored lowercased; `getAccessibleProject` still compares `c.email === identity.email` exactly. Fine while Clerk hands back lowercased primary emails, but normalise both sides if that ever changes.
 
@@ -92,6 +115,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - API route handlers own their auth: `proxy.ts` skips `auth.protect()` for `/api/(.*)` and each handler calls `getAuthenticatedUserId()` and returns a JSON `401` itself. Reason — `clerkMiddleware`'s `auth.protect()` resolves an unauthenticated non-page request with `notFound()` (a bare `404`), which conflicts with the API contract's `401`. Page routes are still protected at the proxy. The collaborators route uses `getCurrentIdentity()` instead of `getAuthenticatedUserId()` because it needs the caller's email for the "owner or collaborator" read check.
 - Clerk is the only user store — collaborators are `ProjectCollaborator` rows keyed by email, enriched to display name + avatar on read via `lib/clerk-users.ts` (`clerkClient().users.getUserList`). Enrichment is best-effort: a Clerk miss or failure degrades to email-only, never an error. No local `User` table.
 - Invites are explicit, not instant-access. `ProjectCollaborator.acceptedAt` (nullable) is the whole mechanism: owner's invite writes a row with `acceptedAt = NULL` (pending, grants nothing); the invitee accepts via `PATCH /api/invites/[projectId]` (sets the timestamp) or declines via `DELETE` (removes the row). `getAccessibleProject` and `listSharedProjects` both require `acceptedAt` set; `listPendingInvites` is its complement. There is no separate invite entity or notification — the pending row is the invite, surfaced in the `/editor` sidebar "Invites" tab.
+- Liveblocks room ID == project ID. The single auth surface is `POST /api/liveblocks-auth`: it reuses `getAccessibleProject` (same owner-or-accepted-collaborator check as the workspace page) and issues a session token with `FULL_ACCESS` to that one room, plus `userInfo` (name/avatar from Clerk, color from `colorForUserId`). Rooms are created lazily on first authorized access (`getOrCreateRoom`, `defaultAccesses: []` — private). The node client is lazily constructed because `new Liveblocks({ secret })` throws on a missing/blank key, which would break `next build`.
 - Do not register a custom Tailwind color theme key named `base` (e.g. `--color-base`). It collides with Tailwind's built-in `text-base` font-size utility (both compile to a class literally named `.text-base`), and the color definition wins — silently turning every `text-base` usage across shadcn components into a text-color rule instead of a font-size rule. Discovered when `CardTitle` rendered nearly invisible (dark-on-dark). The `bg-background` utility (already mapped to the same page-background value) covers the same need without the collision.
 
 ## Session Notes

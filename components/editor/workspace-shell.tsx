@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react"
 
+import { CanvasRoom } from "@/components/editor/canvas"
 import { CreateProjectDialog } from "@/components/editor/create-project-dialog"
 import { DeleteProjectDialog } from "@/components/editor/delete-project-dialog"
 import { ProjectSidebar } from "@/components/editor/project-sidebar"
@@ -101,10 +102,8 @@ function WorkspaceShell({
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <main className="flex flex-1 items-center justify-center bg-background px-6 text-center">
-          <p className="text-sm text-copy-muted">
-            The canvas for {project.name} will live here.
-          </p>
+        <main className="relative flex-1 bg-background">
+          <CanvasRoom roomId={project.id} />
         </main>
 
         {isAiSidebarOpen ? (
