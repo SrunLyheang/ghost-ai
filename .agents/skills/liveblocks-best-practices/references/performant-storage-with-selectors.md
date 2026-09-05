@@ -68,8 +68,8 @@ const firstShapeColor = useStorage((root) => root.shapes[0].color);
 const firstShapeTags = useStorage((root) => root.shapes[0].tags[0]);
 
 // Renders when only the a shape's first tag length changes
-const thisShapesTagLength = useStorage(
-  (root) => root.shapes[SHAPE_INDEX].tags.length
+const firstShapeTagLength = useStorage(
+  (root) => root.shapes[0].tags.length
 );
 
 // Renders when a shape becomes red, or is no longer red

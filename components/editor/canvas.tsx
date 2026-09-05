@@ -130,7 +130,11 @@ const SHAPE_ICONS: Record<CanvasNodeShape, LucideIcon> = {
 }
 
 /** Bottom-center pill toolbar of draggable shapes. */
-function ShapePanel() {
+function ShapePanel({
+  onCreate,
+}: {
+  onCreate: (shape: CanvasNodeShape) => void
+}) {
   const onDragStart = (event: DragEvent, shape: CanvasNodeShape) => {
     const payload: ShapeDragPayload = { shape, ...SHAPE_DEFAULT_SIZE[shape] }
     event.dataTransfer.setData(SHAPE_DRAG_TYPE, JSON.stringify(payload))
@@ -148,8 +152,9 @@ function ShapePanel() {
               type="button"
               draggable
               onDragStart={(event) => onDragStart(event, shape)}
+              onClick={() => onCreate(shape)}
               title={shape}
-              aria-label={`Drag ${shape} onto the canvas`}
+              aria-label={`Add ${shape} to the canvas`}
               className="flex h-8 w-8 cursor-grab items-center justify-center rounded-full text-copy-muted transition-colors hover:bg-elevated hover:text-copy-primary active:cursor-grabbing"
             >
               <Icon className="h-4 w-4" />
@@ -170,12 +175,29 @@ function Canvas() {
       edges: { initial: [] },
     })
   const { screenToFlowPosition } = useReactFlow()
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const dropCounter = useRef(0)
 
   const onDragOver = useCallback((event: DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = "move"
   }, [])
+
+  const addShape = useCallback(
+    (payload: ShapeDragPayload, position: { x: number; y: number }) => {
+      const id = `${payload.shape}-${Date.now()}-${dropCounter.current++}`
+      const node: CanvasNode = {
+        id,
+        type: CANVAS_NODE_TYPE,
+        position,
+        width: payload.width,
+        height: payload.height,
+        data: { label: "", color: DEFAULT_NODE_COLOR, shape: payload.shape },
+      }
+      onNodesChange([{ type: "add", item: node }])
+    },
+    [onNodesChange],
+  )
 
   const onDrop = useCallback(
     (event: DragEvent) => {
@@ -190,26 +212,37 @@ function Canvas() {
         return
       }
 
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      })
-      const id = `${payload.shape}-${Date.now()}-${dropCounter.current++}`
-      const node: CanvasNode = {
-        id,
-        type: CANVAS_NODE_TYPE,
-        position,
-        width: payload.width,
-        height: payload.height,
-        data: { label: "", color: DEFAULT_NODE_COLOR, shape: payload.shape },
-      }
-      onNodesChange([{ type: "add", item: node }])
+      addShape(
+        payload,
+        screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+      )
     },
-    [screenToFlowPosition, onNodesChange],
+    [screenToFlowPosition, addShape],
+  )
+
+  /** Drops the shape at the center of the canvas viewport (keyboard / click path). */
+  const createShapeAtCenter = useCallback(
+    (shape: CanvasNodeShape) => {
+      const rect = wrapperRef.current?.getBoundingClientRect()
+      if (!rect) return
+      addShape(
+        { shape, ...SHAPE_DEFAULT_SIZE[shape] },
+        screenToFlowPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        }),
+      )
+    },
+    [screenToFlowPosition, addShape],
   )
 
   return (
-    <div className="h-full w-full" onDragOver={onDragOver} onDrop={onDrop}>
+    <div
+      ref={wrapperRef}
+      className="h-full w-full"
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -223,7 +256,7 @@ function Canvas() {
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         <MiniMap />
-        <ShapePanel />
+        <ShapePanel onCreate={createShapeAtCenter} />
       </ReactFlow>
     </div>
   )

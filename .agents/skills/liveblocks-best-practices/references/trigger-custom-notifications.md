@@ -197,10 +197,7 @@ inside a single notification.
           aside={<InboxNotification.Icon>❗</InboxNotification.Icon>}
         >
           {activities.map((activity) => (
-            <div key={activity.id}>
-              <div>{activity.data.title}</div>
-              <div>{activity.data.message}</div>
-            </div>
+            <div key={activity.id}>{activity.data.status}</div>
           ))}
         </InboxNotification.Custom>
       );

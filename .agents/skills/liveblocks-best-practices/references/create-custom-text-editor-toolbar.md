@@ -4,7 +4,7 @@ title: "Create custom text editor toolbar"
 
 # Create custom text editor toolbar
 
-Tiptap and Lexical allow you to create custom toolbars, with sty;es that match
+Tiptap and Lexical allow you to create custom toolbars, with styles that match
 the existing toolbar and Liveblocks components. This works the same way for
 `Toolbar` and `FloatingToolbar`. `FloatingToolbar` floats below the current text
 selection.

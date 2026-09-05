@@ -67,7 +67,7 @@ function CustomThread({ thread }: { thread: ThreadData }) {
 ```
 
 Always prefer the method above. Don't customize your thread like this, as you
-will losing basic `Thread` functionality, such as unread message status:
+will lose basic `Thread` functionality, such as unread message status:
 
 ```tsx
 import { Comment } from "@liveblocks/react-ui";

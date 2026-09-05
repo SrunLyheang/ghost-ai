@@ -37,4 +37,4 @@ threads:
 />
 ```
 
-[A full list of override names are here](https://liveblocks.io/docs/api-reference/liveblocks-react-ui#Override-names).
+[A full list of override names is here](https://liveblocks.io/docs/api-reference/liveblocks-react-ui#Override-names).

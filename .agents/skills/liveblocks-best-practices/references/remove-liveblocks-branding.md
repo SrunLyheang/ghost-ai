@@ -5,7 +5,7 @@ title: "Remove Liveblocks branding"
 # Remove Liveblocks branding
 
 By default, Liveblocks displays a "Powered by Liveblocks" badge in your
-application. If you wish to remove remove the badge entirely, you can do so by
+application. If you wish to remove the badge entirely, you can do so by
 following these steps:
 
 In the Liveblocks dashboard, navigate to your team’s settings. Under General,

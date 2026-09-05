@@ -2,7 +2,7 @@
 title: "Primitive component parts"
 ---
 
-# Primivite component parts
+# Primitive component parts
 
 Primitives are headless and unstyled components, and can be used to construct
 components that fit your own design system. Each primitive is made up of one or

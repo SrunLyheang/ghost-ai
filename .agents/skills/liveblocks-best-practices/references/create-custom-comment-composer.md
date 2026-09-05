@@ -35,7 +35,9 @@ function Editor() {
   return (
     <>
       <Composer.Editor components={/* Your custom component parts */} />
-      <button onClick={createMention}>Add mention</button>
+      <button type="button" onClick={createMention}>
+        Add mention
+      </button>
     </>
   );
 }

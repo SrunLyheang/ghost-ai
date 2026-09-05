@@ -23,7 +23,7 @@ import { Timestamp } from "@liveblocks/react-ui/primitives";
 ## Duration
 
 [`Duration`](https://liveblocks.io/docs/api-reference/liveblocks-react-ui#primitives-Duration)
-displays a formatted duration, and automatically re-renders to if the duration
+displays a formatted duration, and automatically re-renders when the duration
 is in progress. Defaults to a short format (e.g. “5s” or “1m 40s”).
 
 ```tsx
