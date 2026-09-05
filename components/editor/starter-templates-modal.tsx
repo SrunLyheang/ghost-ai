@@ -51,7 +51,7 @@ function StarterTemplatesModal({
               key={template.id}
               className="flex flex-col gap-5 rounded-xl border border-surface-border p-5"
             >
-              <div className="overflow-hidden rounded-lg border border-surface-border-subtle bg-base">
+              <div className="overflow-hidden rounded-lg border border-surface-border-subtle bg-surface">
                 <TemplatePreview template={template} />
               </div>
               <div className="flex flex-1 flex-col gap-2">
@@ -162,7 +162,9 @@ function PreviewShape({
   stroke: string
 }) {
   const { x, y, w, h } = box
-  const common = { fill, stroke, strokeWidth: 1.25 }
+  // Opaque fill with a full-strength colored border (the canvas node's
+  // selected look), so template colors read clearly in the small preview.
+  const common = { fill, stroke, strokeWidth: 2 }
 
   if (shape === "circle") {
     return (
@@ -197,7 +199,7 @@ function PreviewShape({
       y={y}
       width={w}
       height={h}
-      rx={shape === "pill" ? h / 2 : 6}
+      rx={shape === "pill" ? h / 2 : 8}
       {...common}
     />
   )

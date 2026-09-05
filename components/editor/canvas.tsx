@@ -187,7 +187,7 @@ function CanvasNodeView({ id, data, selected = false }: NodeProps<CanvasNode>) {
 
   return (
     <div
-      className="group relative flex h-full w-full items-center justify-center px-3 py-2 text-center text-xs text-copy-primary"
+      className="group relative flex h-full w-full items-center justify-center px-3 py-2 text-center text-sm font-medium text-copy-primary"
       onDoubleClick={() => setEditing(true)}
     >
       <NodeResizer
@@ -258,11 +258,11 @@ function CanvasNodeView({ id, data, selected = false }: NodeProps<CanvasNode>) {
           onBlur={stopEditing}
           onKeyDown={onKeyDown}
           style={{ color: textColor }}
-          className="nodrag nopan relative z-10 w-full resize-none overflow-hidden border-0 bg-transparent text-center text-xs outline-none placeholder:text-copy-muted"
+          className="nodrag nopan relative z-10 w-full resize-none overflow-hidden border-0 bg-transparent text-center text-sm outline-none placeholder:text-copy-muted"
         />
       ) : (
         <span
-          className={`relative ${label ? "" : "text-copy-muted"}`}
+          className={`relative z-10 whitespace-pre-wrap wrap-break-word ${label ? "" : "text-copy-muted"}`}
           style={label ? { color: textColor } : undefined}
         >
           {label || LABEL_PLACEHOLDER}
