@@ -4,7 +4,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Shape panel (`context/feature-specs/12-shape-panel.md`) — bottom pill toolbar; drag a shape onto the canvas to create a node — done
+- Edge behavior (`context/feature-specs/16-edge-behavior.md`) — four-side connection handles + custom right-angle edge renderer with inline labels — done
 
 ## Current Goal
 
@@ -90,6 +90,35 @@ Update this file whenever the current phase, active feature, or implementation s
     - `CanvasNodeView` — `NodeProps<CanvasNode>` renderer registered as `nodeTypes[CANVAS_NODE_TYPE]` (module const). Renders `<ShapeOutline shape={data.shape} color={data.color} />` (a stretched `viewBox="0 0 100 100"` SVG, `preserveAspectRatio="none"`, `vector-effect="non-scaling-stroke"`) — rect/pill = `<rect rx>`, circle = `<ellipse>`, diamond/hexagon = `<polygon>`, cylinder = two `<path>`s — plus centered label and `Handle` top (target) + bottom (source). Each shape now draws its own outline.
   - No changes to `workspace-shell.tsx` (`<CanvasRoom>` API unchanged).
 - Verified: `tsc --noEmit`, `eslint components/editor/canvas.tsx types/canvas.ts --max-warnings=0`, and `npm run build` all pass clean.
+- Node shape rendering (`context/feature-specs/13-node-shape.md`) — `components/editor/canvas.tsx` only, no type or API changes:
+  - `CanvasNodeView` now branches on shape: `CSS_SHAPES` (`rectangle`/`pill`/`circle`) render as an absolutely-positioned bordered `<div>` (`borderRadius` 8 for rectangle, `9999` for pill/circle; `${color}14` fill); `diamond`/`hexagon`/`cylinder` render via `SvgShape` — a stretched `viewBox="0 0 100 100"` SVG with `preserveAspectRatio="none"` + `vector-effect="non-scaling-stroke"` so the outline scales with node size. Border/stroke is dim at rest (`${color}66` / `strokeOpacity 0.4`) and full-strength when `selected`.
+  - `SHAPE_SVG_PATHS` — shared `Partial<Record<CanvasNodeShape, string>>` of inner SVG markup for the three non-box shapes, consumed by both `SvgShape` (`dangerouslySetInnerHTML`) and the drag ghost. `ShapeOutline` (old all-SVG renderer) removed.
+  - `createShapeGhost(shape)` — builds an off-screen (`position:fixed; top/left:-1000px`) element at `SHAPE_DEFAULT_SIZE[shape]` styled like the shape (bordered div or inline `<svg>` string). `ShapePanel.onDragStart` appends it, calls `dataTransfer.setDragImage(ghost, w/2, h/2)`, then `setTimeout(() => ghost.remove(), 0)`. Native drag image → preview tracks the cursor and the browser clears it on drop/cancel; no React state.
+  - Scope limits honored: shape-panel layout, drop-to-create logic, resize, and label editing all untouched; drag/drop change is the ghost only.
+- Verified: `eslint components/editor/canvas.tsx --max-warnings=0` and `npm run build` (TypeScript included) pass clean.
+- Node editing (`context/feature-specs/14-node-editing.md`) — `components/editor/canvas.tsx` only, no type or API changes:
+  - `CanvasNodeView` renders React Flow's `<NodeResizer isVisible={selected} minWidth={48} minHeight={48}>` — resize handles show only on the selected node, sizes clamp at 48px, and drags flow through React Flow's own dimension changes → the same `onNodesChange` `useLiveblocksFlow` provides, so resizes sync. Handles/lines styled inline off the node `color` (`${color}55` line, `color` border, `var(--bg-surface)` fill) to stay subtle on the dark canvas.
+  - Inline label editing: `useState(editing)` in the node view; `onDoubleClick` on the node wrapper opens it. While editing, an uncontrolled `<textarea>` (`defaultValue={label}`, `autoFocus`, `placeholder="Add label"`) sits `absolute inset-0` directly over the label with identical padding/type styles → no layout shift. `onChange` calls `useReactFlow().updateNodeData(id, { label })` (routes through `onNodesChange`, so it syncs); `onBlur` closes; `Escape` calls `blur()` (→ blur closes). The textarea carries `nodrag nopan` so typing/selecting never drags the node or pans the canvas.
+  - At rest, an empty label shows the same centered "Add label" placeholder text in `text-copy-muted`.
+  - Scope limits honored: shape rendering, shape panel, drag preview, and drop-to-create all untouched.
+- Verified: `eslint components/editor/canvas.tsx --max-warnings=0` and `npm run build` (TypeScript included) pass clean.
+- Node color toolbar (`context/feature-specs/15-node-color-toolbar.md`):
+  - `types/canvas.ts`: new `NodeColor { fill; text }` type + `NODE_COLORS` (the 8 pairs from `ui-context.md`, index 0 = neutral-dark default). `DEFAULT_NODE_COLOR` is now `NODE_COLORS[0].fill` (`#1F1F1F`, was `#00c8d4`); new `DEFAULT_NODE_TEXT_COLOR = NODE_COLORS[0].text` (`#EDEDED`). `CanvasNodeData` gains `textColor: string`.
+  - `components/editor/canvas.tsx`: `CanvasNodeView` now renders a React Flow `<NodeToolbar isVisible={selected} position={Position.Top} offset={12}>` — a rounded-full `bg-surface` bar of 8 `ColorSwatch` buttons (one per pair). `nodrag nopan` on the bar so toolbar clicks never drag the node or pan the canvas. Selecting a swatch calls `updateNodeData(id, { color: pair.fill, textColor: pair.text })` (routes through `useLiveblocksFlow` → syncs, no server call). `ColorSwatch` — active swatch gets a 3px ring in its text color (with a `--bg-surface` gap ring), hover shows a tight `0 0 5px 1px <text>` glow via local `useState`.
+  - Node rendering switched from an 8%-opacity tinted fill to the **solid** pair fill: CSS shapes use `background: color` + border in `textColor` (dim `${textColor}66` at rest, full when selected); `SvgShape` takes `fill`/`stroke` props (was `color`) — solid fill, `textColor` stroke. Label text (`<span>` and edit `<textarea>`) is `style={{ color: textColor }}`; empty-label placeholder stays `text-copy-muted`.
+  - `createShapeGhost` drag preview updated for the darker default: solid `DEFAULT_NODE_COLOR` fill, `DEFAULT_NODE_TEXT_COLOR` stroke/border (a `#1F1F1F`-on-`#1F1F1F` ghost would have been invisible).
+  - Scope limits honored: no drag/drop changes, no selection-logic changes, no full color picker — predefined pairs only.
+- Verified: `eslint components/editor/canvas.tsx types/canvas.ts --max-warnings=0` and `npm run build` (TypeScript included) pass clean.
+
+- Edge behavior (`context/feature-specs/16-edge-behavior.md`) — `components/editor/canvas.tsx` + `types/canvas.ts` only:
+  - `types/canvas.ts`: `CanvasEdgeData` widened from `Record<string, unknown>` to an interface with optional `label?: string` (+ index signature).
+  - Node handles: `CanvasNodeView` root div gained `group`; the two old `<Handle>`s replaced by `NodeHandles` — one `Handle` per side (`top`/`right`/`bottom`/`left`, all `type="source"` so `ConnectionMode.Loose` lets any pair connect), 9px white dot (`#f5f5f7`) with a `1.5px solid var(--bg-base)` border, `opacity-0! transition-opacity! group-hover:opacity-100!` so they fade in only on node hover.
+  - `defaultEdgeOptions` (module const) passed to `<ReactFlow>`: `type: CANVAS_EDGE_TYPE`, `markerEnd: { type: ArrowClosed, 14×14, color var(--text-muted) }`, `style: { strokeLinecap: "round" }`. React Flow merges this into the connection object before it reaches Liveblocks' `onConnect` (verified in `@xyflow/react` `onConnectExtended`) and again at render, so new edges persist + render as the custom type with no `onConnect` wrapper.
+  - `CanvasEdgeView` registered as `edgeTypes[CANVAS_EDGE_TYPE]`: `getSmoothStepPath({ ..., borderRadius: 0 })` for square right-angle routing; `<BaseEdge interactionWidth={0}>` for the visible line (stroke `var(--text-muted)` @ 0.65 opacity at rest → `var(--text-primary)` @ 1 when `hovered || selected || editing`, 120ms transition); a separate 20px-wide `stroke="transparent"` `<path>` with `pointerEvents: "stroke"` as the hover/click/double-click target (bigger hit area, same visible thickness).
+  - Inline labels via `EdgeLabelRenderer` positioned at `getSmoothStepPath`'s returned `labelX/labelY` (no manual midpoint math). Double-click the edge (or the label) → `EdgeLabelInput`, an `<input>` that grows via `width: ${max(len,5)}ch`, commits the trimmed value on blur / Enter / Escape (Enter+Escape just call `blur()`). Saved label shows as a `bg-surface` bordered pill; an active edge with no label shows a faint "Double-click to label" hint. Label wrapper carries `nodrag nopan` + `stopPropagation` on mousedown/dblclick + `pointerEvents: "all"` so editing never pans/drags the canvas.
+  - Label writes route through a small module `EdgeDataContext` → `Canvas.updateEdgeData`, which emits an `onEdgesChange([{ type: "replace", id, item: { ...edge, data: { ...edge.data, ...patch } } }])` — the same Liveblocks-synced change stream (`applyEdgeChanges` handles `replace` by reconciling the full edge). React Flow ≤12.11.6 has no `updateEdgeData`, hence the context.
+  - Scope limits honored: node creation, shape panel, and the node renderer (beyond adding handles + the `group` class) untouched.
+- Verified: `tsc --noEmit`, `eslint components/editor/canvas.tsx types/canvas.ts --max-warnings=0`, and `npm run build` all pass clean.
 
 ## In Progress
 
@@ -97,7 +126,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Next Up
 
-- Canvas interactions: inline label editing, `canvasEdge` rendering, a `<Controls>`, and `<Cursors />` from `@liveblocks/react-flow` for live cursors (Presence `cursor` is already typed). Fill in `Storage` in `liveblocks.config.ts` when persistence (`canvasJsonPath`) or `useStorage`/`useMutation` is needed.
+- Canvas interactions: a `<Controls>`, and `<Cursors />` from `@liveblocks/react-flow` for live cursors (Presence `cursor` is already typed). Fill in `Storage` in `liveblocks.config.ts` when persistence (`canvasJsonPath`) or `useStorage`/`useMutation` is needed.
 - Wire the AI-chat `<aside>` in `workspace-shell.tsx` (still an inert placeholder).
 - Collaborator email vs. Clerk primary email is matched case-insensitively only because invites are stored lowercased; `getAccessibleProject` still compares `c.email === identity.email` exactly. Fine while Clerk hands back lowercased primary emails, but normalise both sides if that ever changes.
 

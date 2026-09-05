@@ -9,8 +9,29 @@ export type CanvasNodeShape =
   | "cylinder"
   | "hexagon"
 
-/** Default fill/border color for a freshly dropped node (`--accent-primary`). */
-export const DEFAULT_NODE_COLOR = "#00c8d4"
+/** A predefined node background / paired label color. */
+export interface NodeColor {
+  /** Node background fill. */
+  fill: string
+  /** Label color, tuned for contrast on `fill` (see ui-context.md). */
+  text: string
+}
+
+/** 8 predefined node color pairs. First entry is the default. */
+export const NODE_COLORS: NodeColor[] = [
+  { fill: "#1F1F1F", text: "#EDEDED" },
+  { fill: "#10233D", text: "#52A8FF" },
+  { fill: "#2E1938", text: "#BF7AF0" },
+  { fill: "#331B00", text: "#FF990A" },
+  { fill: "#3C1618", text: "#FF6166" },
+  { fill: "#3A1726", text: "#F75F8F" },
+  { fill: "#0F2E18", text: "#62C073" },
+  { fill: "#062822", text: "#0AC7B4" },
+]
+
+/** Default fill/text for a freshly dropped node. */
+export const DEFAULT_NODE_COLOR = NODE_COLORS[0].fill
+export const DEFAULT_NODE_TEXT_COLOR = NODE_COLORS[0].text
 
 /** Default width/height per shape, used as the shape-panel drag payload size. */
 export const SHAPE_DEFAULT_SIZE: Record<
@@ -39,13 +60,19 @@ export interface ShapeDragPayload {
 export interface CanvasNodeData {
   label: string
   color: string
+  textColor: string
   shape: CanvasNodeShape
   // React Flow requires node data to be an index-signature record.
   [key: string]: unknown
 }
 
 /** Data carried by every canvas edge. */
-export type CanvasEdgeData = Record<string, unknown>
+export interface CanvasEdgeData {
+  /** Inline edge label, edited by double-clicking the edge. */
+  label?: string
+  // React Flow requires edge data to be an index-signature record.
+  [key: string]: unknown
+}
 
 /** Custom node/edge type keys used across the canvas. */
 export const CANVAS_NODE_TYPE = "canvasNode"
