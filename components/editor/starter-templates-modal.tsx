@@ -139,8 +139,7 @@ function TemplatePreview({ template }: { template: CanvasTemplate }) {
             key={node.id}
             shape={node.data.shape}
             box={b}
-            fill={node.data.color}
-            stroke={node.data.textColor}
+            accent={node.data.textColor}
           />
         )
       })}
@@ -153,18 +152,16 @@ type PreviewBox = { x: number; y: number; w: number; h: number }
 function PreviewShape({
   shape,
   box,
-  fill,
-  stroke,
+  accent,
 }: {
   shape: CanvasTemplate["nodes"][number]["data"]["shape"]
   box: PreviewBox
-  fill: string
-  stroke: string
+  accent: string
 }) {
   const { x, y, w, h } = box
-  // Opaque fill with a full-strength colored border (the canvas node's
-  // selected look), so template colors read clearly in the small preview.
-  const common = { fill, stroke, strokeWidth: 2 }
+  // The real node fills are near-black by design and read as blobs at this
+  // size with no labels — tint each shape with its accent color instead.
+  const common = { fill: accent, fillOpacity: 0.22, stroke: accent, strokeWidth: 2 }
 
   if (shape === "circle") {
     return (

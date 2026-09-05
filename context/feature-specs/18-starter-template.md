@@ -55,5 +55,5 @@ Add a small starter template library so users can start a canvas from a pre-buil
 - Template data is defined using shared canvas types.
 - Import modal renders template cards with previews.
 - Import action replaces the current canvas through the existing node and edge state flow.
-- Editor navbar includes the import entry point.
+- Editor navbar includes the import e ntry point.
 - `npm run build` passes.
