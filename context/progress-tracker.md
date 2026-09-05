@@ -4,7 +4,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Edge behavior (`context/feature-specs/16-edge-behavior.md`) — four-side connection handles + custom right-angle edge renderer with inline labels — done
+- Starter templates (`context/feature-specs/18-starter-template.md`) — importable pre-built canvases with card previews, replaces canvas contents through the synced node/edge state — done
 
 ## Current Goal
 
@@ -120,13 +120,35 @@ Update this file whenever the current phase, active feature, or implementation s
   - Scope limits honored: node creation, shape panel, and the node renderer (beyond adding handles + the `group` class) untouched.
 - Verified: `tsc --noEmit`, `eslint components/editor/canvas.tsx types/canvas.ts --max-warnings=0`, and `npm run build` all pass clean.
 
+- Canvas ergonomics (`context/feature-specs/17-canvas-ergonomics.md`) — `components/editor/canvas.tsx` + new `hooks/use-keyboard-shortcuts.ts`, no type or API changes:
+  - `hooks/use-keyboard-shortcuts.ts` (new): `useKeyboardShortcuts({ reactFlow, onUndo, onRedo })` — one `window` `keydown` listener. `+`/`=` → `reactFlow.zoomIn({ duration: 200 })`, `-` → `zoomOut`; `Cmd/Ctrl+Z` → undo, `Cmd/Ctrl+Shift+Z` / `Cmd/Ctrl+Y` → redo. `isEditableTarget` skips `INPUT`/`TEXTAREA`/`isContentEditable` targets so node/edge label editing is unaffected. `reactFlow` param typed as `Pick<ReactFlowInstance, "zoomIn" | "zoomOut">`.
+  - `canvas.tsx`: `<MiniMap>` removed (import + element). New `CanvasControls` — a `<Panel position="bottom-left">` rounded-full `bg-surface` bar: zoom out / fit view / zoom in (each calls the `useReactFlow()` viewport helper with `{ duration: 200 }` for a smooth tween), a thin `w-px` divider, then undo / redo. `ControlButton` helper (shared by all 5) dims + disables via `disabled:opacity-40 disabled:pointer-events-none`.
+  - `Canvas` now grabs the full `useReactFlow<CanvasNode, CanvasEdge>()` instance (was destructuring only `screenToFlowPosition`), pulls `useUndo`/`useRedo`/`useCanUndo`/`useCanRedo` from `@liveblocks/react/suspense`, passes `canUndo`/`canRedo` to `CanvasControls`, and calls `useKeyboardShortcuts({ reactFlow, onUndo: undo, onRedo: redo })`. Undo/redo act on Liveblocks room history — `useLiveblocksFlow` writes node/edge changes into Storage, so history captures them.
+  - Scope limits honored: shape panel, node/edge rendering, and the collaborative-state setup all untouched.
+- Verified: `eslint components/editor/canvas.tsx hooks/use-keyboard-shortcuts.ts --max-warnings=0` and `npm run build` (TypeScript included) pass clean.
+
+- Remove node (`components/editor/canvas.tsx`, no type or API changes): `CanvasNodeView`'s floating `NodeToolbar` now has a trash button after the color swatches (thin `w-px` divider between). Calls `deleteElements({ nodes: [{ id }] })` from `useReactFlow()`, which routes remove changes through `onNodesChange` + fires `onDelete` — same Liveblocks-synced path as every other change, so it's collaborative and undoable. Keyboard Delete/Backspace on a selected node already worked via React Flow's default `deleteKeyCode`; this just adds the discoverable affordance. Verified `tsc --noEmit` clean.
+
+- Remove edge (`components/editor/canvas.tsx`, no type or API changes): `CanvasEdgeView`'s label area (shown on hover / select) now ends with a trash button that calls `deleteElements({ edges: [{ id }] })`. Backspace/Delete on a selected edge already worked via React Flow's default `deleteKeyCode` — clicking the edge's fat hit-path selects it, then the key removes it through the synced `onEdgesChange`/`onDelete`. Button is the discoverable affordance. Verified `tsc --noEmit` clean.
+
+- Starter templates (`context/feature-specs/18-starter-template.md`):
+  - `components/editor/starter-templates.ts` (new): `CanvasTemplate` type (`id`/`name`/`description`/`nodes`/`edges`), `CANVAS_TEMPLATES` — three templates (Microservices, CI/CD Pipeline, Event-Driven System) built with small `node()` / `edge()` helpers off the shared `types/canvas.ts` types + `NODE_COLORS` / `SHAPE_DEFAULT_SIZE`. `templateBounds(template)` — tight bbox of node positions, used to fit the card preview. `IMPORT_TEMPLATE_EVENT` const + `dispatchTemplateImport(template)` — a `window` `CustomEvent` bridge so the navbar (outside the Liveblocks `RoomProvider`) can drive the canvas state without cross-provider plumbing.
+  - `components/editor/starter-templates-modal.tsx` (new, `"use client"`): `StarterTemplatesModal` — a wide `Dialog` (`sm:max-w-350` ≈ 1400px, `rounded-2xl border bg-elevated p-8`), header "Import Template" + a `<kbd>⌘Z</kbd>` undo hint above a hairline divider, then a scrollable (`max-h-[70vh] overflow-y-auto`) fixed `grid-cols-3` grid of `rounded-xl border` cards. Each card: a large static `TemplatePreview` (`h-72`) in a `rounded-lg bg-base` inset (plain `<svg>`, no React Flow, no labels — `templateBounds` → uniform scale + centering, edges as `<line>` between node centers, nodes as `<ellipse>` / `<polygon>` / rounded `<rect>` by `data.shape`, filled `data.color` stroked `data.textColor`), name, description, then a full-width `outline` `Import` button (lucide `Download` icon) → `onImport(template)` then closes.
+  - `components/editor/canvas.tsx`: `Canvas` gained a `useEffect` listening for `IMPORT_TEMPLATE_EVENT` — emits `remove` changes for every current node/edge + `add` changes for the template's, all through the existing `onNodesChange` / `onEdgesChange` (so the swap is Liveblocks-synced and undoable), then `setTimeout(() => reactFlow.fitView({ duration: 200 }), 80)`. No type or export changes.
+  - `components/editor/workspace-shell.tsx`: navbar right cluster gains a `Templates` button (lucide `LayoutTemplate`, `outline` `sm`) opening the modal via new `isTemplatesOpen` state; `<StarterTemplatesModal onImport={dispatchTemplateImport}>` rendered beside the project dialogs. No prop changes.
+  - `components/editor/starter-templates.check.ts` (new): assert-based self-check (`npx tsx …`) — ≥3 templates, unique node ids, every edge endpoint resolves, every node box inside `templateBounds`.
+  - Scope limits honored: no template saving, no custom/user templates, no server persistence, no node/edge rendering changes.
+- Verified: `npx tsx components/editor/starter-templates.check.ts`, `eslint` on the four touched/new files `--max-warnings=0`, and `npm run build` (TypeScript included) all pass clean.
+
+- Select all (`components/editor/canvas.tsx` + `hooks/use-keyboard-shortcuts.ts`): `CanvasControls` bottom-left bar has a `Select all` button (lucide `BoxSelect`, after a divider before undo/redo), and `Cmd/Ctrl+A` triggers the same handler (`useKeyboardShortcuts` gained a required `onSelectAll`, guarded by `isEditableTarget`). `Canvas.selectAll` emits `{ type: "replace", id, item: { ...n, selected: true } }` per node through `onNodesChange` — `replace` not `select`, because a batch of `select` changes hits React Flow's single-selection reconciler and only the last node stays selected. No-ops on an empty canvas. Verified `eslint --max-warnings=0` + `npm run build` clean.
+
 ## In Progress
 
 - None.
 
 ## Next Up
 
-- Canvas interactions: a `<Controls>`, and `<Cursors />` from `@liveblocks/react-flow` for live cursors (Presence `cursor` is already typed). Fill in `Storage` in `liveblocks.config.ts` when persistence (`canvasJsonPath`) or `useStorage`/`useMutation` is needed.
+- Canvas interactions: `<Cursors />` from `@liveblocks/react-flow` for live cursors (Presence `cursor` is already typed). Fill in `Storage` in `liveblocks.config.ts` when persistence (`canvasJsonPath`) or `useStorage`/`useMutation` is needed. (Zoom + undo/redo control bar landed in spec 17.)
 - Wire the AI-chat `<aside>` in `workspace-shell.tsx` (still an inert placeholder).
 - Collaborator email vs. Clerk primary email is matched case-insensitively only because invites are stored lowercased; `getAccessibleProject` still compares `c.email === identity.email` exactly. Fine while Clerk hands back lowercased primary emails, but normalise both sides if that ever changes.
 

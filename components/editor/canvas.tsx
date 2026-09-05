@@ -5,6 +5,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type DragEvent,
@@ -16,6 +17,10 @@ import {
   ClientSideSuspense,
   LiveblocksProvider,
   RoomProvider,
+  useCanRedo,
+  useCanUndo,
+  useRedo,
+  useUndo,
 } from "@liveblocks/react/suspense"
 import { useLiveblocksFlow } from "@liveblocks/react-flow"
 import {
@@ -27,7 +32,6 @@ import {
   getSmoothStepPath,
   Handle,
   MarkerType,
-  MiniMap,
   NodeResizer,
   NodeToolbar,
   Panel,
@@ -42,14 +46,27 @@ import {
   type NodeTypes,
 } from "@xyflow/react"
 import {
+  BoxSelect,
   Circle,
   Cylinder,
   Diamond,
   Hexagon,
+  Maximize2,
   Pill,
   RectangleHorizontal,
+  Redo2,
+  Trash2,
+  Undo2,
+  ZoomIn,
+  ZoomOut,
   type LucideIcon,
 } from "lucide-react"
+
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
+import {
+  IMPORT_TEMPLATE_EVENT,
+  type CanvasTemplate,
+} from "@/components/editor/starter-templates"
 
 import {
   CANVAS_EDGE_TYPE,
@@ -146,7 +163,7 @@ const MIN_NODE_SIZE = 48
  *  Selected nodes also show subtle resize handles (React Flow `NodeResizer`). */
 function CanvasNodeView({ id, data, selected = false }: NodeProps<CanvasNode>) {
   const { shape, color, textColor, label } = data
-  const { updateNodeData } = useReactFlow()
+  const { updateNodeData, deleteElements } = useReactFlow()
   const [editing, setEditing] = useState(false)
 
   const stopEditing = useCallback(() => setEditing(false), [])
@@ -198,6 +215,16 @@ function CanvasNodeView({ id, data, selected = false }: NodeProps<CanvasNode>) {
               }
             />
           ))}
+          <span className="mx-0.5 h-5 w-px bg-surface-border" />
+          <button
+            type="button"
+            onClick={() => deleteElements({ nodes: [{ id }] })}
+            aria-label="Delete node"
+            title="Delete node"
+            className="flex h-5 w-5 items-center justify-center rounded-full text-copy-muted transition-colors hover:bg-elevated hover:text-copy-primary"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
       </NodeToolbar>
       {CSS_SHAPES.has(shape) ? (
@@ -369,6 +396,7 @@ function CanvasEdgeView({
   markerEnd,
 }: EdgeProps<CanvasEdge>) {
   const updateEdgeData = useContext(EdgeDataContext)
+  const { deleteElements } = useReactFlow()
   const [hovered, setHovered] = useState(false)
   const [editing, setEditing] = useState(false)
 
@@ -417,7 +445,7 @@ function CanvasEdgeView({
       {(active || label) && (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan"
+            className="nodrag nopan flex items-center gap-1"
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
@@ -445,6 +473,20 @@ function CanvasEdgeView({
               <span className="rounded-full px-2 py-0.5 text-[10px] leading-none text-copy-faint">
                 Double-click to label
               </span>
+            )}
+            {!editing && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  deleteElements({ edges: [{ id }] })
+                }}
+                aria-label="Delete connection"
+                title="Delete connection"
+                className="flex h-5 w-5 items-center justify-center rounded-full border border-surface-border bg-surface text-copy-muted shadow-sm transition-colors hover:bg-elevated hover:text-copy-primary"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
             )}
           </div>
         </EdgeLabelRenderer>
@@ -528,14 +570,107 @@ function ShapePanel({
               draggable
               onDragStart={(event) => onDragStart(event, shape)}
               onClick={() => onCreate(shape)}
-              title={shape}
               aria-label={`Add ${shape} to the canvas`}
-              className="flex h-8 w-8 cursor-grab items-center justify-center rounded-full text-copy-muted transition-colors hover:bg-elevated hover:text-copy-primary active:cursor-grabbing"
+              className="group relative flex h-8 w-8 cursor-grab items-center justify-center rounded-full text-copy-muted transition-colors hover:bg-elevated hover:text-copy-primary active:cursor-grabbing"
             >
               <Icon className="h-4 w-4" />
+              <HoverLabel className="capitalize">{shape}</HoverLabel>
             </button>
           )
         })}
+      </div>
+    </Panel>
+  )
+}
+
+/** One icon button in the floating control bar. */
+function ControlButton({
+  label,
+  onClick,
+  disabled = false,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="group relative flex h-8 w-8 items-center justify-center rounded-full text-copy-muted transition-colors hover:bg-elevated hover:text-copy-primary disabled:pointer-events-none disabled:opacity-40"
+    >
+      {children}
+      <HoverLabel>{label}</HoverLabel>
+    </button>
+  )
+}
+
+/** Tooltip that fades in above its parent button on hover. Parent needs
+ *  `group relative`. */
+function HoverLabel({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <span
+      className={`pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-surface-border bg-surface px-2 py-1 text-xs font-medium text-copy-primary opacity-0 shadow-lg transition-opacity group-hover:opacity-100 ${className ?? ""}`}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** Bottom-left pill bar: zoom controls and Liveblocks undo/redo. */
+function CanvasControls({
+  onUndo,
+  onRedo,
+  onSelectAll,
+  canUndo,
+  canRedo,
+  canSelectAll,
+}: {
+  onUndo: () => void
+  onRedo: () => void
+  onSelectAll: () => void
+  canUndo: boolean
+  canRedo: boolean
+  canSelectAll: boolean
+}) {
+  const { zoomIn, zoomOut, fitView } = useReactFlow()
+  return (
+    <Panel position="bottom-left">
+      <div className="flex items-center gap-1 rounded-full border border-surface-border bg-surface px-2 py-1.5 shadow-lg">
+        <ControlButton label="Zoom out" onClick={() => zoomOut({ duration: 200 })}>
+          <ZoomOut className="h-4 w-4" />
+        </ControlButton>
+        <ControlButton label="Fit view" onClick={() => fitView({ duration: 200 })}>
+          <Maximize2 className="h-4 w-4" />
+        </ControlButton>
+        <ControlButton label="Zoom in" onClick={() => zoomIn({ duration: 200 })}>
+          <ZoomIn className="h-4 w-4" />
+        </ControlButton>
+        <span className="mx-1 h-5 w-px bg-surface-border" />
+        <ControlButton
+          label="Select all"
+          onClick={onSelectAll}
+          disabled={!canSelectAll}
+        >
+          <BoxSelect className="h-4 w-4" />
+        </ControlButton>
+        <span className="mx-1 h-5 w-px bg-surface-border" />
+        <ControlButton label="Undo" onClick={onUndo} disabled={!canUndo}>
+          <Undo2 className="h-4 w-4" />
+        </ControlButton>
+        <ControlButton label="Redo" onClick={onRedo} disabled={!canRedo}>
+          <Redo2 className="h-4 w-4" />
+        </ControlButton>
       </div>
     </Panel>
   )
@@ -549,9 +684,36 @@ function Canvas() {
       nodes: { initial: [] },
       edges: { initial: [] },
     })
-  const { screenToFlowPosition } = useReactFlow()
+  const reactFlow = useReactFlow<CanvasNode, CanvasEdge>()
+  const { screenToFlowPosition } = reactFlow
+  const undo = useUndo()
+  const redo = useRedo()
+  const canUndo = useCanUndo()
+  const canRedo = useCanRedo()
+
   const wrapperRef = useRef<HTMLDivElement>(null)
   const dropCounter = useRef(0)
+
+  // Replace the whole canvas with a starter template (fired from the navbar).
+  useEffect(() => {
+    function onImport(event: Event) {
+      const { nodes: tplNodes, edges: tplEdges } = (
+        event as CustomEvent<CanvasTemplate>
+      ).detail
+      onNodesChange([
+        ...nodes.map((n) => ({ type: "remove" as const, id: n.id })),
+        ...tplNodes.map((item) => ({ type: "add" as const, item })),
+      ])
+      onEdgesChange([
+        ...edges.map((e) => ({ type: "remove" as const, id: e.id })),
+        ...tplEdges.map((item) => ({ type: "add" as const, item })),
+      ])
+      // ponytail: fixed delay to let the synced state settle before fitting.
+      window.setTimeout(() => reactFlow.fitView({ duration: 200 }), 80)
+    }
+    window.addEventListener(IMPORT_TEMPLATE_EVENT, onImport)
+    return () => window.removeEventListener(IMPORT_TEMPLATE_EVENT, onImport)
+  }, [nodes, edges, onNodesChange, onEdgesChange, reactFlow])
 
   // Route an edge-label edit through the same synced change stream as everything else.
   const updateEdgeData = useCallback(
@@ -573,6 +735,26 @@ function Canvas() {
     event.preventDefault()
     event.dataTransfer.dropEffect = "move"
   }, [])
+
+  // Mark every node selected. `replace` (not `select`) so React Flow's
+  // single-selection reconciler doesn't immediately clear all but one.
+  const selectAll = useCallback(() => {
+    if (nodes.length === 0) return
+    onNodesChange(
+      nodes.map((n) => ({
+        type: "replace" as const,
+        id: n.id,
+        item: { ...n, selected: true },
+      })),
+    )
+  }, [nodes, onNodesChange])
+
+  useKeyboardShortcuts({
+    reactFlow,
+    onUndo: undo,
+    onRedo: redo,
+    onSelectAll: selectAll,
+  })
 
   const addShape = useCallback(
     (payload: ShapeDragPayload, position: { x: number; y: number }) => {
@@ -654,7 +836,14 @@ function Canvas() {
           fitView
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-          <MiniMap />
+          <CanvasControls
+            onUndo={undo}
+            onRedo={redo}
+            onSelectAll={selectAll}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            canSelectAll={nodes.length > 0}
+          />
           <ShapePanel onCreate={createShapeAtCenter} />
         </ReactFlow>
       </EdgeDataContext.Provider>
